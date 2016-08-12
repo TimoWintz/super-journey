@@ -1,4 +1,4 @@
 ** Cycling Tracker **
 
 usage:
-./cyclingtracker
+./tracker
