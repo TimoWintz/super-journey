@@ -1,5 +1,7 @@
 import gi, callback
-from gi.repository import Gtk, Gio, GLib
+from gi.repository import GObject, Gtk, Gio, GLib, Gdk
+gi.require_version('OsmGpsMap', '1.0')
+from gi.repository import OsmGpsMap
 from repository import Repository, FileType
 
 class GladeHandler(object):
@@ -162,6 +164,7 @@ class ActivitiesTabHandler(GladeHandler, callback.ActivitiesLoadedHandler, callb
         self.activity_rows_to_lih = dict()
         self.activities = []
         self.displayed_activity = None
+        self.activity_details_handler = None
 
     def hide_spinner(self):
         list_box = self.get_object_by_name("ActivitiesListBox")
@@ -214,13 +217,19 @@ class ActivitiesTabHandler(GladeHandler, callback.ActivitiesLoadedHandler, callb
         self.run_update_ui(self.update_list_view)
 
     def update_activity_view(self):
-        label = self.get_object_by_name("ActivityDetailsLabel")
+        box = self.get_object_by_name("ActivityDetailsPaneBox")
         button_delete = self.get_object_by_name("DeleteActivityButton")
+
+        if self.activity_details_handler:
+            box.remove(self.activity_details_handler.get_object())
+
         if self.displayed_activity:
-            label.set_markup(self.displayed_activity.to_markup())
+            self.activity_details_handler = ActivityDetailsHandler(self.repository, self.displayed_activity)
+            adb = self.activity_details_handler.build_view()
+            box.add(adb)
+            box.show_all()
             button_delete.set_visible(True)
         else:
-            label.set_label("")
             button_delete.set_visible(False)
 
     def update_list_view(self):
@@ -228,8 +237,7 @@ class ActivitiesTabHandler(GladeHandler, callback.ActivitiesLoadedHandler, callb
         list_box = self.get_object_by_name("ActivitiesListBox")
         for activity in self.activities:
             lih = ActivityListItemHandler(self.repository, activity)
-            lih.build_view()
-            list_box_row = lih.get_object()
+            list_box_row = lih.build_view()
             self.activity_rows_to_lih[list_box_row] = lih
             list_box.add(list_box_row)
             if self.displayed_activity and self.displayed_activity.id == activity.id:
@@ -247,9 +255,10 @@ class ActivityListItemHandler(GladeHandler):
         self.activity_data = activity_data
 
     def build_view(self):
-        super().build_view()
+        res = super().build_view()
         label = self.get_object_by_name("ActivityNameLabel")
         label.set_label(self.activity_data.name)
+        return res
 
     def get_activity_data(self):
         return self.activity_data
@@ -257,3 +266,29 @@ class ActivityListItemHandler(GladeHandler):
 class ActivitySpinnerItemHandler(GladeHandler):
     def __init__(self, repository):
         super().__init__(repository, "spinnerListBoxRow.glade", "SpinnerListBoxRow")
+
+class ActivityDetailsHandler(GladeHandler):
+    def __init__(self, repository, activity_data):
+        super().__init__(repository, "activityDetailsBox.glade", "ActivityDetailsBox")
+        self.activity_data = activity_data
+    
+    def build_view(self):
+        res = super().build_view()
+        label = self.get_object_by_name("ActivityDetailsLabel")
+        label.set_markup(self.activity_data.to_markup())
+        map = OsmGpsMap.Map(repo_uri='http://a.tile.opencyclemap.org/cycle/#Z/#X/#Y.png')
+        map.set_vexpand(True)
+        
+        track = OsmGpsMap.MapTrack()
+        last_point = None
+
+        # add the activity's track
+        for gps_point in self.activity_data.gps_track.gps_points:
+            point = OsmGpsMap.MapPoint()
+            point.set_degrees(gps_point.latitude, gps_point.longitude)
+            track.add_point(point)
+            last_point = gps_point
+        map.track_add(track)
+        map.set_center_and_zoom(last_point.latitude, last_point.longitude, 13)
+        res.add(map)
+        return res

@@ -1,7 +1,7 @@
 import time, callback, gpxpy, datetime, math
 from enum import Enum
 from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker, relationship, subqueryload
 from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 
@@ -121,14 +121,19 @@ class Repository(object):
         session = self.session_maker()
         session.add(activity)
         session.commit()
-        loaded_activity = session.query(Activity).order_by(Activity.id.desc()).first()
+        loaded_activity = session.query(Activity)\
+            .options(subqueryload(Activity.gps_track).subqueryload(GpsTrack.gps_points))\
+            .order_by(Activity.id.desc())\
+            .first()
         session.close()
         return loaded_activity
 
     def get_all_activities(self, args, handler: callback.ActivitiesLoadedHandler):
         #time.sleep(1)
         session = self.session_maker()
-        activities = session.query(Activity).all()
+        activities = session.query(Activity)\
+            .options(subqueryload(Activity.gps_track).subqueryload(GpsTrack.gps_points))\
+            .all()
         session.close()
 
         handler.on_activities_loaded(activities)
