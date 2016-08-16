@@ -1,13 +1,13 @@
-import gi, sys, repository
+import gi
+gi.require_version('GtkClutter', '1.0')
+from gi.repository import GtkClutter
 gi.require_version('Gtk', '3.0')
-
-import handler # import MainWindowHandler, ApplicationHeaderHandler
 from gi.repository import Gtk, GObject
-
-
+import sys, repository, handler
 
 def main(args):
     GObject.threads_init()
+    GtkClutter.init([])
     repo = repository.Repository()
     repo.init_database()
     if len(args) > 1 and args[1] == "populate":

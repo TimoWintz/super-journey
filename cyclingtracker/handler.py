@@ -1,5 +1,9 @@
-import gi, callback
+import gi, callback, math
 from gi.repository import GObject, Gtk, Gio, GLib, Gdk
+gi.require_version('GtkChamplain', '0.12')
+from gi.repository import GtkChamplain
+gi.require_version('Champlain', '0.12')
+from gi.repository import Champlain
 gi.require_version('OsmGpsMap', '1.0')
 from gi.repository import OsmGpsMap
 from repository import Repository, FileType
@@ -276,19 +280,77 @@ class ActivityDetailsHandler(GladeHandler):
         res = super().build_view()
         label = self.get_object_by_name("ActivityDetailsLabel")
         label.set_markup(self.activity_data.to_markup())
-        map = OsmGpsMap.Map(repo_uri='http://a.tile.opencyclemap.org/cycle/#Z/#X/#Y.png')
+        #map = OsmGpsMap.Map(repo_uri='http://a.tile.opencyclemap.org/cycle/#Z/#X/#Y.png')
+        map = GtkChamplain.Embed()
         map.set_vexpand(True)
-        
-        track = OsmGpsMap.MapTrack()
+        ch_view = map.get_view()
+        map_source = Champlain.MapSourceFactory().create("osm-cyclemap")
+        ch_view.set_map_source(map_source)
+        ch_view.set_animate_zoom(False)
+
+        # track = OsmGpsMap.MapTrack()
+        path_layer = Champlain.PathLayer()
         last_point = None
 
         # add the activity's track
         for gps_point in self.activity_data.gps_track.gps_points:
-            point = OsmGpsMap.MapPoint()
-            point.set_degrees(gps_point.latitude, gps_point.longitude)
-            track.add_point(point)
+            # point = OsmGpsMap.MapPoint()
+            # point.set_degrees(gps_point.latitude, gps_point.longitude)
+            # track.add_point(point)
+            location = Champlain.Coordinate(latitude=gps_point.latitude, longitude=gps_point.longitude)
+            path_layer.add_node(location)
             last_point = gps_point
-        map.track_add(track)
-        map.set_center_and_zoom(last_point.latitude, last_point.longitude, 13)
+
+        ch_view.add_layer(path_layer)
+        ch_view.center_on(last_point.latitude, last_point.longitude)
+        ch_view.set_zoom_level(12)
+
+        #map.track_add(track)
+        #map.set_center_and_zoom(last_point.latitude, last_point.longitude, 13)
         res.add(map)
+
+        # activity profile
+        drawing_area = Gtk.DrawingArea()
+        drawing_area.set_vexpand(True)
+        drawing_area.connect("draw", self.draw_callback)
+
+        res.add(drawing_area)
+
         return res
+
+    def draw_callback(self, widget, cr):
+
+        context = widget.get_style_context()
+        width = widget.get_allocated_width()
+        height = widget.get_allocated_height()
+
+        Gtk.render_background(context, cr, 0, 0, width, height)
+        
+        cr.move_to(10, 10)
+        cr.line_to(10, height - 10)
+        cr.line_to(width - 10, height - 10)
+        cr.set_line_width(0.5)
+        
+        color = context.get_color(context.get_state())
+        cr.set_source_rgba(color.red, color.green, color.blue, color.alpha)
+        cr.stroke()
+
+        plot_height = height - 20
+        plot_width = width - 20
+
+        ele_min = self.activity_data.gps_track.elevation_min
+        ele_max = self.activity_data.gps_track.elevation_max
+        length = self.activity_data.length
+
+        ele_to_y = lambda ele: plot_height * (ele_max - ele)/(ele_max-ele_min) + 10
+        dist_to_x = lambda dist: plot_width * (dist/length) + 10
+        
+        cr.move_to(10, height - 10)
+        for gps_point in self.activity_data.gps_track.gps_points:
+            elevation = gps_point.elevation
+            distance = gps_point.cumulative_length
+            cr.line_to(dist_to_x(distance), ele_to_y(elevation))
+        cr.stroke()
+
+        return
+    
