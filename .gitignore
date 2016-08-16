@@ -1,5 +1,6 @@
 .*
 *.glade~
+*.glade#
 __pycache__/
 gpxpy/
 cyclingtracker/db/tracker.db
