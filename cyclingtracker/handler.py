@@ -309,17 +309,43 @@ class ActivityDetailsHandler(GladeHandler):
         #map.set_center_and_zoom(last_point.latitude, last_point.longitude, 13)
         res.add(map)
 
-        # activity profile
+        # activity profile        
+        tooltip = Gtk.Window(Gtk.WindowType.POPUP)
+        tooltip.set_gravity(Gdk.Gravity.STATIC)
+        tooltip_label = Gtk.Label()
+        tooltip.add(tooltip_label)
+
         drawing_area = Gtk.DrawingArea()
         drawing_area.set_vexpand(True)
+        drawing_area.add_events(Gdk.EventMask.POINTER_MOTION_MASK |
+            Gdk.EventMask.ENTER_NOTIFY_MASK |
+            Gdk.EventMask.LEAVE_NOTIFY_MASK )
         drawing_area.connect("draw", self.draw_callback)
+        drawing_area.connect("enter-notify-event", self.on_enter_notify_event)
+        drawing_area.connect("motion-notify-event", self.on_motion_notify_event)
+        drawing_area.connect("leave-notify-event", self.on_leave_notify_event)
 
+        drawing_area.set_tooltip_window(tooltip)
         res.add(drawing_area)
 
         return res
 
-    def draw_callback(self, widget, cr):
+    def on_enter_notify_event(self, widget, event):
+        widget.get_tooltip_window().show_all()
+        return False
+    
+    def on_leave_notify_event(self, widget, event):
+        widget.get_tooltip_window().hide()
+        return False
 
+    def on_motion_notify_event(self, widget, event):
+        tooltip = widget.get_tooltip_window()
+        tooltip.move(event.x_root + 25, event.y_root + 25)
+        tooltip.get_child().set_markup("<tt>Distance " + str(round(self.x_to_dist(event.x)/1000, 1)) + "km \n" +\
+                                       "Altitude " + str(round(self.y_to_ele(event.y))) + "m </tt>")
+        return False
+
+    def draw_callback(self, widget, cr):
         context = widget.get_style_context()
         width = widget.get_allocated_width()
         height = widget.get_allocated_height()
@@ -344,13 +370,12 @@ class ActivityDetailsHandler(GladeHandler):
 
         ele_to_y = lambda ele: plot_height * (ele_max - ele)/(ele_max-ele_min) + 10
         dist_to_x = lambda dist: plot_width * (dist/length) + 10
-        
-        cr.move_to(10, height - 10)
+
+        self.y_to_ele = lambda y: ele_max - (y - 10)/plot_height * (ele_max-ele_min)
+        self.x_to_dist = lambda x: (x - 10)/plot_width * length
+
         for gps_point in self.activity_data.gps_track.gps_points:
             elevation = gps_point.elevation
             distance = gps_point.cumulative_length
             cr.line_to(dist_to_x(distance), ele_to_y(elevation))
         cr.stroke()
-
-        return
-    
