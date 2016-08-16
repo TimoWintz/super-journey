@@ -89,6 +89,8 @@ class ApplicationHeaderHandler(GladeHandler, callback.ActivityImportedHandler):
             (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
              Gtk.STOCK_OPEN, Gtk.ResponseType.OK))
 
+        dialog.set_default_size(0, 0)
+
         filter_fit = Gtk.FileFilter()
         filter_fit.set_name("Garmin FIT")
         filter_fit.add_pattern("*.fit")
@@ -283,36 +285,48 @@ class ActivityDetailsHandler(GladeHandler):
         #map = OsmGpsMap.Map(repo_uri='http://a.tile.opencyclemap.org/cycle/#Z/#X/#Y.png')
         map = GtkChamplain.Embed()
         map.set_vexpand(True)
-        ch_view = map.get_view()
+        self.ch_view = map.get_view()
         map_source = Champlain.MapSourceFactory().create("osm-cyclemap")
-        ch_view.set_map_source(map_source)
-        ch_view.set_animate_zoom(False)
+        self.ch_view.set_map_source(map_source)
+        # self.ch_view.set_animate_zoom(False)
 
         # track = OsmGpsMap.MapTrack()
         path_layer = Champlain.PathLayer()
-        last_point = None
+        self.marker_layer = Champlain.MarkerLayer()
+        # last_point = None
 
+        bounding_box = Champlain.BoundingBox()
         # add the activity's track
         for gps_point in self.activity_data.gps_track.gps_points:
             # point = OsmGpsMap.MapPoint()
             # point.set_degrees(gps_point.latitude, gps_point.longitude)
             # track.add_point(point)
+            bounding_box.extend(gps_point.latitude, gps_point.longitude)
             location = Champlain.Coordinate(latitude=gps_point.latitude, longitude=gps_point.longitude)
             path_layer.add_node(location)
-            last_point = gps_point
+            # last_point = gps_point
+        
+        
+        center_latitude, center_longitude = bounding_box.get_center()
 
-        ch_view.add_layer(path_layer)
-        ch_view.center_on(last_point.latitude, last_point.longitude)
-        ch_view.set_zoom_level(12)
-
+        self.ch_view.add_layer(path_layer)
+        self.ch_view.add_layer(self.marker_layer)
+        self.ch_view.center_on(center_latitude, center_longitude)
+        self.ch_view.set_zoom_level(10)
+        
         #map.track_add(track)
         #map.set_center_and_zoom(last_point.latitude, last_point.longitude, 13)
         res.add(map)
 
         # activity profile        
         tooltip = Gtk.Window(Gtk.WindowType.POPUP)
+        tooltip.set_default_size(0, 0)
         tooltip.set_gravity(Gdk.Gravity.STATIC)
         tooltip_label = Gtk.Label()
+        tooltip_label.set_margin_bottom(5)
+        tooltip_label.set_margin_left(5)
+        tooltip_label.set_margin_top(5)
+        tooltip_label.set_margin_right(5)
         tooltip.add(tooltip_label)
 
         drawing_area = Gtk.DrawingArea()
@@ -332,17 +346,31 @@ class ActivityDetailsHandler(GladeHandler):
 
     def on_enter_notify_event(self, widget, event):
         widget.get_tooltip_window().show_all()
+        self.point_marker = Champlain.Point()
+        self.marker_layer.add_marker(self.point_marker)
         return False
     
     def on_leave_notify_event(self, widget, event):
         widget.get_tooltip_window().hide()
+        self.marker_layer.remove_all()
         return False
 
     def on_motion_notify_event(self, widget, event):
+        if event.x < 10 or event.x > widget.get_allocated_width() - 10\
+            or event.y < 10 or event.y > widget.get_allocated_height() - 10:
+            return False
+        
         tooltip = widget.get_tooltip_window()
-        tooltip.move(event.x_root + 25, event.y_root + 25)
-        tooltip.get_child().set_markup("<tt>Distance " + str(round(self.x_to_dist(event.x)/1000, 1)) + "km \n" +\
-                                       "Altitude " + str(round(self.y_to_ele(event.y))) + "m </tt>")
+        distance = self.x_to_dist(event.x)
+        gps_point = self.activity_data.gps_track.find_point_at_distance(distance)
+        if gps_point:
+            tooltip_y = event.y_root - event.y
+            tooltip_x = event.x_root
+            tooltip.move(tooltip_x + 25, tooltip_y + 25)
+            tooltip.get_child().set_markup("<tt>Distance " + str(round(gps_point.cumulative_length/1000, 1)) + " km\n" +\
+                                               "Altitude " + str(round(gps_point.elevation)) + " m</tt>")
+            self.point_marker.set_location(gps_point.latitude, gps_point.longitude)
+            # self.ch_view.center_on(gps_point.latitude, gps_point.longitude)
         return False
 
     def draw_callback(self, widget, cr):
@@ -355,7 +383,7 @@ class ActivityDetailsHandler(GladeHandler):
         cr.move_to(10, 10)
         cr.line_to(10, height - 10)
         cr.line_to(width - 10, height - 10)
-        cr.set_line_width(0.5)
+        cr.set_line_width(0)
         
         color = context.get_color(context.get_state())
         cr.set_source_rgba(color.red, color.green, color.blue, color.alpha)
@@ -368,8 +396,8 @@ class ActivityDetailsHandler(GladeHandler):
         ele_max = self.activity_data.gps_track.elevation_max
         length = self.activity_data.length
 
-        ele_to_y = lambda ele: plot_height * (ele_max - ele)/(ele_max-ele_min) + 10
-        dist_to_x = lambda dist: plot_width * (dist/length) + 10
+        self.ele_to_y = lambda ele: plot_height * (ele_max - ele)/(ele_max-ele_min) + 10
+        self.dist_to_x = lambda dist: plot_width * (dist/length) + 10
 
         self.y_to_ele = lambda y: ele_max - (y - 10)/plot_height * (ele_max-ele_min)
         self.x_to_dist = lambda x: (x - 10)/plot_width * length
@@ -377,5 +405,8 @@ class ActivityDetailsHandler(GladeHandler):
         for gps_point in self.activity_data.gps_track.gps_points:
             elevation = gps_point.elevation
             distance = gps_point.cumulative_length
-            cr.line_to(dist_to_x(distance), ele_to_y(elevation))
-        cr.stroke()
+            cr.line_to(self.dist_to_x(distance), self.ele_to_y(elevation))
+        cr.line_to(plot_width + 10, plot_height + 10)
+        cr.line_to(10, plot_height + 10)
+        cr.close_path()
+        cr.fill()

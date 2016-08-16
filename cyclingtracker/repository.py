@@ -45,6 +45,10 @@ class GpsTrack(Base):
     
     elevation_min = Column(Float)
     elevation_max = Column(Float)
+    latitude_min = Column(Float)
+    latitude_max = Column(Float)
+    longitude_min = Column(Float)
+    longitude_max = Column(Float)
 
     def __init__(self):
         self.gps_points = []
@@ -52,14 +56,31 @@ class GpsTrack(Base):
     def add_point(self, gps_point: GpsPoint):
         self.gps_points.append(gps_point)
 
-    def compute_average_speed():
-        raise NotImplementedError
-    
-    def compute_distance():
-        raise NotImplementedError
+    def find_point_at_distance(self, distance):
+        closeness = math.inf
+        last_closeness = None
 
-    def compute_duration():
-        raise NotImplementedError
+        index_bottom = 0
+        index_top = len(self.gps_points)
+        
+        found_point = None
+
+        while index_top - index_bottom > 1:
+            index = round((index_bottom + index_top) / 2)
+            point = self.gps_points[index]
+            if last_closeness and last_closeness < closeness:
+                # the new point is not closer than the previous one
+                return found_point
+            if abs(point.cumulative_length - distance) < closeness:
+                last_closeness = closeness
+                closeness = abs(point.cumulative_length - distance)
+                found_point = point
+            if point.cumulative_length > distance: # need to lookup lower
+                index_top = index
+            elif point.cumulative_length < distance: # need to lookup higher
+                index_bottom = index
+        
+        return found_point
 
 class FileType(Enum):
     fit = 1
@@ -91,6 +112,11 @@ class Repository(object):
 
         elevation_min = math.inf
         elevation_max = -math.inf
+        latitude_min = math.inf
+        latitude_max = -math.inf
+        longitude_min = math.inf
+        longitude_max = -math.inf
+
         db_track = GpsTrack()
 
         for track in gpx.tracks:
@@ -115,16 +141,22 @@ class Repository(object):
                     db_point.gps_track = db_track
                     db_track.add_point(db_point)
 
-                    if point.elevation < elevation_min:
-                        elevation_min = point.elevation
-                    if point.elevation > elevation_max:
-                        elevation_max = point.elevation
+                    elevation_min = min(point.elevation, elevation_min)
+                    elevation_max = max(point.elevation, elevation_max)
+                    latitude_min = min(point.latitude, latitude_min)
+                    latitude_max = max(point.latitude, latitude_max)
+                    longitude_min = min(point.longitude, longitude_min)
+                    longitude_max = max(point.longitude, longitude_max)
 
                     seq += 1
                     last_location = location
 
         db_track.elevation_min = elevation_min
         db_track.elevation_max = elevation_max
+        db_track.latitude_min = latitude_min
+        db_track.latitude_max = latitude_max
+        db_track.longitude_min = longitude_min
+        db_track.longitude_max = longitude_max
         
         db_activity = Activity(name= "Activité de " + str(math.floor(length/1000+0.5)) + " km", start_timestamp= start_time,
             duration= end_time-start_time, length= length, total_ascent= 0)
