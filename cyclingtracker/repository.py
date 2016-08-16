@@ -1,4 +1,4 @@
-import time, callback, gpxpy, datetime, math
+import time, callback, gpxpy, datetime, math, sys
 from enum import Enum
 from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey
 from sqlalchemy.orm import sessionmaker, relationship, subqueryload
@@ -11,7 +11,7 @@ class Activity(Base):
     name = Column(String)
     start_timestamp = Column(Integer)
     duration = Column(Integer)
-    length = Column(Integer)
+    length = Column(Float)
     total_ascent = Column(Integer)
     gps_track = relationship("GpsTrack", uselist=False, back_populates="activity",
         cascade="all, delete, delete-orphan")
@@ -19,7 +19,7 @@ class Activity(Base):
     def to_markup(self):
         return "<big><b>" + self.name + "</b></big>\n" +\
             "<b>Départ</b> : " + (datetime.datetime.fromtimestamp(self.start_timestamp)).ctime() + "\n" +\
-            "<b>Longueur</b> : " + str(self.length/1000) + "km\n" +\
+            "<b>Longueur</b> : " + str(round(self.length/1000, 1)) + "km\n" +\
             "<b>Dénivelé pos.</b> : " + str(self.total_ascent) + "m\n" +\
             "<b>Durée totale</b> : " + str(math.floor(self.duration/3600)) + "h " + str(math.floor(self.duration/60)%60) + "m";
 
@@ -31,6 +31,7 @@ class GpsPoint(Base):
     latitude = Column(Float)
     longitude = Column(Float)
     elevation = Column(Float)
+    cumulative_length = Column(Float)
     gps_track_id = Column(Integer, ForeignKey('gpstracks.id'))
     gps_track = relationship("GpsTrack", back_populates="gps_points")
 
@@ -41,6 +42,9 @@ class GpsTrack(Base):
     activity = relationship("Activity", back_populates="gps_track")
     gps_points = relationship("GpsPoint", back_populates="gps_track",
         cascade="all, delete, delete-orphan")
+    
+    elevation_min = Column(Float)
+    elevation_max = Column(Float)
 
     def __init__(self):
         self.gps_points = []
@@ -85,6 +89,8 @@ class Repository(object):
         length = 0
         last_location = None
 
+        elevation_min = math.inf
+        elevation_max = -math.inf
         db_track = GpsTrack()
 
         for track in gpx.tracks:
@@ -98,17 +104,28 @@ class Repository(object):
                     db_point.elevation = point.elevation
                     db_point.latitude = point.latitude
                     db_point.longitude = point.longitude
+                    
                     end_time = db_point.timestamp
                     location = gpxpy.geo.Location(point.latitude, point.longitude, point.elevation)
 
-                    db_point.gps_track = db_track
-                    db_track.add_point(db_point)
-                    seq += 1
                     if last_location:
                         length += last_location.distance_3d(location)
+                    
+                    db_point.cumulative_length = length
+                    db_point.gps_track = db_track
+                    db_track.add_point(db_point)
+
+                    if point.elevation < elevation_min:
+                        elevation_min = point.elevation
+                    if point.elevation > elevation_max:
+                        elevation_max = point.elevation
+
+                    seq += 1
                     last_location = location
 
-
+        db_track.elevation_min = elevation_min
+        db_track.elevation_max = elevation_max
+        
         db_activity = Activity(name= "Activité de " + str(math.floor(length/1000+0.5)) + " km", start_timestamp= start_time,
             duration= end_time-start_time, length= length, total_ascent= 0)
         db_activity.gps_track = db_track
