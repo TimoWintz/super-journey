@@ -380,13 +380,15 @@ class ActivityDetailsHandler(GladeHandler):
 
         Gtk.render_background(context, cr, 0, 0, width, height)
         
+        cr.set_source_rgb(0, 0, 0)
+        cr.set_line_width(1)
+
         cr.move_to(10, 10)
         cr.line_to(10, height - 10)
         cr.line_to(width - 10, height - 10)
-        cr.set_line_width(0)
         
-        color = context.get_color(context.get_state())
-        cr.set_source_rgba(color.red, color.green, color.blue, color.alpha)
+        #color = context.get_color(context.get_state())
+        
         cr.stroke()
 
         plot_height = height - 20
@@ -402,11 +404,36 @@ class ActivityDetailsHandler(GladeHandler):
         self.y_to_ele = lambda y: ele_max - (y - 10)/plot_height * (ele_max-ele_min)
         self.x_to_dist = lambda x: (x - 10)/plot_width * length
 
+        cr.set_line_width(0)
+        cumulative_distance = 0
+        segment_points = []
+        
         for gps_point in self.activity_data.gps_track.gps_points:
-            elevation = gps_point.elevation
-            distance = gps_point.cumulative_length
-            cr.line_to(self.dist_to_x(distance), self.ele_to_y(elevation))
-        cr.line_to(plot_width + 10, plot_height + 10)
-        cr.line_to(10, plot_height + 10)
-        cr.close_path()
-        cr.fill()
+            segment_points.append(gps_point)
+            segment_length = gps_point.cumulative_length - cumulative_distance
+            if segment_length > 500: # grade coloring per 500m segment
+                segment_elevation = gps_point.elevation - segment_points[0].elevation
+                segment_grade = segment_elevation / segment_length
+                cumulative_distance = gps_point.cumulative_length
+                cr.move_to(self.dist_to_x(cumulative_distance), plot_height + 10)
+                color = max(min(segment_grade * 10, 1), 0)
+                cr.set_source_rgb(color, color, color) # good enough for now lol
+                for gps_point_to_draw in segment_points:
+                    elevation = gps_point_to_draw.elevation
+                    distance = gps_point_to_draw.cumulative_length
+                    cr.line_to(self.dist_to_x(distance), self.ele_to_y(elevation))
+                cr.line_to(self.dist_to_x(cumulative_distance), plot_height + 10)
+                cr.line_to(self.dist_to_x(segment_points[0].cumulative_length), plot_height + 10)
+                cr.line_to(self.dist_to_x(segment_points[0].cumulative_length), self.ele_to_y(segment_points[0].elevation))
+                cr.close_path()
+                cr.fill()
+                segment_points = []
+
+        # for gps_point in self.activity_data.gps_track.gps_points:
+        #     elevation = gps_point.elevation
+        #     distance = gps_point.cumulative_length
+        #     cr.line_to(self.dist_to_x(distance), self.ele_to_y(elevation))
+        # cr.line_to(plot_width + 10, plot_height + 10)
+        # cr.line_to(10, plot_height + 10)
+        # cr.close_path()
+        # cr.fill()
