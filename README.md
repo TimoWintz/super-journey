@@ -1,4 +1,6 @@
-** Cycling Tracker **
+Cycling Tracker
+===============
 
-usage:
-./tracker
+##usage
+`~ ./tracker`
+
