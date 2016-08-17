@@ -404,10 +404,12 @@ class ActivityDetailsHandler(GladeHandler):
         self.y_to_ele = lambda y: ele_max - (y - 10)/plot_height * (ele_max-ele_min)
         self.x_to_dist = lambda x: (x - 10)/plot_width * length
 
+        self.colormap = lambda x: (max(min(3*(1-7*x), 1) - 0.1, 0), max(min(((1-7*x) - 0.4)*3, 1) - 0.1, 0), max(min(((1-7*x) - 0.8)*5, 1) - 0.1, 0))
+
         cr.set_line_width(0)
         cumulative_distance = 0
         segment_points = []
-        
+
         for gps_point in self.activity_data.gps_track.gps_points:
             segment_points.append(gps_point)
             segment_length = gps_point.cumulative_length - cumulative_distance
@@ -416,8 +418,8 @@ class ActivityDetailsHandler(GladeHandler):
                 segment_grade = segment_elevation / segment_length
                 cumulative_distance = gps_point.cumulative_length
                 cr.move_to(self.dist_to_x(cumulative_distance), plot_height + 10)
-                color = max(min(segment_grade * 10, 1), 0)
-                cr.set_source_rgb(color, color, color) # good enough for now lol
+                (c1, c2, c3) = self.colormap(segment_grade)
+                cr.set_source_rgb(c1, c2, c3) # good enough for now lol
                 for gps_point_to_draw in segment_points:
                     elevation = gps_point_to_draw.elevation
                     distance = gps_point_to_draw.cumulative_length
@@ -428,7 +430,7 @@ class ActivityDetailsHandler(GladeHandler):
                 cr.close_path()
                 cr.fill()
                 segment_points = []
-
+        
         # for gps_point in self.activity_data.gps_track.gps_points:
         #     elevation = gps_point.elevation
         #     distance = gps_point.cumulative_length
