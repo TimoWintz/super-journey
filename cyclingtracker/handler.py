@@ -404,32 +404,53 @@ class ActivityDetailsHandler(GladeHandler):
         self.y_to_ele = lambda y: ele_max - (y - 10)/plot_height * (ele_max-ele_min)
         self.x_to_dist = lambda x: (x - 10)/plot_width * length
 
-        self.colormap = lambda x: (max(min(3*(1-7*x), 1) - 0.1, 0), max(min(((1-7*x) - 0.4)*3, 1) - 0.1, 0), max(min(((1-7*x) - 0.8)*5, 1) - 0.1, 0))
+        self.colormap = lambda x: (max(min(3*(1-7*x), 1), 0), max(min(((1-7*x) - 0.4)*3, 1) , 0), max(min(((1-7*x) - 0.8)*5, 1), 0))
 
         cr.set_line_width(0)
         cumulative_distance = 0
+        cumulative_distance_chunk = 0
         segment_points = []
+        segment_points_chunk = []
 
         for gps_point in self.activity_data.gps_track.gps_points:
             segment_points.append(gps_point)
+            segment_points_chunk.append(gps_point)
             segment_length = gps_point.cumulative_length - cumulative_distance
-            if segment_length > 500: # grade coloring per 500m segment
+            segment_length_chunk = gps_point.cumulative_length - cumulative_distance_chunk
+            if segment_length > 100: # grade coloring per 50m segment
                 segment_elevation = gps_point.elevation - segment_points[0].elevation
                 segment_grade = segment_elevation / segment_length
+                segment_elevation_chunk = gps_point.elevation - segment_points_chunk[0].elevation
+                segment_grade_chunk = segment_elevation_chunk / segment_length_chunk
                 cumulative_distance = gps_point.cumulative_length
-                cr.move_to(self.dist_to_x(cumulative_distance), plot_height + 10)
-                (c1, c2, c3) = self.colormap(segment_grade)
-                cr.set_source_rgb(c1, c2, c3) # good enough for now lol
-                for gps_point_to_draw in segment_points:
-                    elevation = gps_point_to_draw.elevation
-                    distance = gps_point_to_draw.cumulative_length
-                    cr.line_to(self.dist_to_x(distance), self.ele_to_y(elevation))
-                cr.line_to(self.dist_to_x(cumulative_distance), plot_height + 10)
-                cr.line_to(self.dist_to_x(segment_points[0].cumulative_length), plot_height + 10)
-                cr.line_to(self.dist_to_x(segment_points[0].cumulative_length), self.ele_to_y(segment_points[0].elevation))
-                cr.close_path()
-                cr.fill()
                 segment_points = []
+                if (abs(segment_grade_chunk - segment_grade) > 0.01):
+                    # cr.move_to(self.dist_to_x(cumulative_distance_chunk), plot_height + 10)
+                    cr.stroke()
+                    cr.set_source_rgb(0, 0, 0) # good enough for now lol
+                    cr.set_line_width(1.0)
+                    for gps_point_to_draw in segment_points_chunk:
+                        elevation = gps_point_to_draw.elevation
+                        distance = gps_point_to_draw.cumulative_length
+                        cr.line_to(self.dist_to_x(distance), self.ele_to_y(elevation))
+                    cr.stroke()
+
+                    (c1, c2, c3) = self.colormap(segment_grade)
+                    cr.set_source_rgb(c1, c2, c3)
+                    cr.move_to(self.dist_to_x(cumulative_distance_chunk), plot_height + 10)                    
+                    for gps_point_to_draw in segment_points_chunk:
+                        elevation = gps_point_to_draw.elevation
+                        distance = gps_point_to_draw.cumulative_length
+                        cr.line_to(self.dist_to_x(distance), self.ele_to_y(elevation))
+
+                    cr.line_to(self.dist_to_x(segment_points_chunk[-1].cumulative_length), plot_height + 10)
+                    cr.close_path()
+                    cr.fill()
+                    cr.stroke()
+                    cumulative_distance_chunk =  gps_point.cumulative_length
+                    segment_points_chunk = [segment_points_chunk[-1]]
+                
+                    
         
         # for gps_point in self.activity_data.gps_track.gps_points:
         #     elevation = gps_point.elevation
