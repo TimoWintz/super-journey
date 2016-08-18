@@ -414,7 +414,8 @@ class ActivityDetailsHandler(GladeHandler):
         segment_points_chunk = []
         elevation = self.activity_data.gps_track.gps_points[0].elevation #is there at least one point?
         distance = self.activity_data.gps_track.gps_points[0].cumulative_length
-        for i_point in range(1, len(self.activity_data.gps_track.gps_points)):
+        skip = int(len(self.activity_data.gps_track.gps_points)/plot_width)
+        for i_point in range(1, len(self.activity_data.gps_track.gps_points), skip):
             point = self.activity_data.gps_track.gps_points[i_point]
             cr.stroke()
             cr.set_source_rgb(0, 0, 0)
