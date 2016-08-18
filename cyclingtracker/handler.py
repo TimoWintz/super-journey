@@ -369,7 +369,7 @@ class ActivityDetailsHandler(GladeHandler):
             tooltip.move(tooltip_x + 25, tooltip_y + 25)
             tooltip.get_child().set_markup("<tt>Distance " + str(round(gps_point.cumulative_length/1000, 1)) + " km\n" +\
                                                "Altitude " + str(round(gps_point.elevation)) + " m\n" +\
-                                               "Pente " + str(round(gps_point.grade*100)) + "%</tt>")
+                                               "Pente " + str(round(gps_point.grade*1000)/10) + "%</tt>")
             self.point_marker.set_location(gps_point.latitude, gps_point.longitude)
             # self.ch_view.center_on(gps_point.latitude, gps_point.longitude)
         return False
