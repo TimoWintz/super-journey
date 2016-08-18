@@ -31,6 +31,7 @@ class GpsPoint(Base):
     latitude = Column(Float)
     longitude = Column(Float)
     elevation = Column(Float)
+    grade = Column(Float)
     cumulative_length = Column(Float)
     gps_track_id = Column(Integer, ForeignKey('gpstracks.id'))
     gps_track = relationship("GpsTrack", back_populates="gps_points")
@@ -56,7 +57,7 @@ class GpsTrack(Base):
     def add_point(self, gps_point: GpsPoint):
         self.gps_points.append(gps_point)
 
-    def find_point_at_distance(self, distance):
+    def find_point_at_distance(self, distance, return_index=False):
         closeness = math.inf
         last_closeness = None
 
@@ -70,17 +71,56 @@ class GpsTrack(Base):
             point = self.gps_points[index]
             if last_closeness and last_closeness < closeness:
                 # the new point is not closer than the previous one
-                return found_point
+                if return_index:
+                    return found_index
+                else:
+                    return found_point
             if abs(point.cumulative_length - distance) < closeness:
                 last_closeness = closeness
                 closeness = abs(point.cumulative_length - distance)
                 found_point = point
+                found_index = index
             if point.cumulative_length > distance: # need to lookup lower
                 index_top = index
             elif point.cumulative_length < distance: # need to lookup higher
                 index_bottom = index
-        
-        return found_point
+        if return_index:
+            return found_index
+        else:
+            return found_point
+
+    def estimate_grade(self):
+        max_error = 3
+        anchors = [0]
+        def compute_error(i_min, i_max):
+            error = 0
+            point_min = self.gps_points[i_min]
+            point_max = self.gps_points[i_max]
+            if (point_max.cumulative_length == point_min.cumulative_length):
+                grade = 0
+            else:
+                grade = (point_max.elevation - point_min.elevation) / (point_max.cumulative_length - point_min.cumulative_length)
+            est_fun = lambda d: point_min.elevation + grade * (d - point_min.cumulative_length)
+            for i in range(i_min + 1, i_max - 1):
+                d = self.gps_points[i].cumulative_length
+                ele = self.gps_points[i].elevation
+                error = error + abs(est_fun(d) - ele)**2
+            error = math.sqrt(error)/math.sqrt(i_max - i_min + 1)
+            return error
+        for i in range(1, len(self.gps_points)):
+            if compute_error(anchors[-1], i) > max_error:
+                anchors.append(i)
+        anchors.append(len(self.gps_points) - 1)
+
+        for i in range(1, len(anchors)):
+            point_min = self.gps_points[anchors[i-1]]
+            point_max = self.gps_points[anchors[i]]
+            if (point_max.cumulative_length == point_min.cumulative_length):
+                grade = 0
+            else:
+                grade = (point_max.elevation - point_min.elevation) / (point_max.cumulative_length - point_min.cumulative_length)
+            for j in range(anchors[i-1], anchors[i]):
+                self.gps_points[j].grade = grade
 
 class FileType(Enum):
     fit = 1
@@ -150,6 +190,8 @@ class Repository(object):
 
                     seq += 1
                     last_location = location
+
+        db_track.estimate_grade()
 
         db_track.elevation_min = elevation_min
         db_track.elevation_max = elevation_max
