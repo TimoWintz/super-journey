@@ -90,13 +90,8 @@ class GpsTrack(Base):
             return found_point
 
     def estimate_grade(self): # Segmenting Time Series: A Survey and Novel Approach - Computer ... for reference "Sliding Time Window" approach
-        max_error = 3
+        max_error = 4
         anchors = [0]
-        skip = 0
-        t_init = self.gps_points[0].timestamp
-        while((self.gps_points[skip].timestamp - t_init) < 20):
-            skip = skip + 1
-        skip = min(skip, 50)
         def compute_error(i_min, i_max):
             error = 0
             point_min = self.gps_points[i_min]
@@ -112,9 +107,13 @@ class GpsTrack(Base):
                 error = error + abs(est_fun(d) - ele)**2
             error = math.sqrt(error)/math.sqrt(i_max - i_min + 1)
             return error
-        for i in range(1, len(self.gps_points), skip):
-            if compute_error(anchors[-1], i) > max_error:
-                anchors.append(i)
+        dist = 0
+        for i in range(1, len(self.gps_points)):          
+            if (self.gps_points[i].cumulative_length - dist) > 200:
+                dist = self.gps_points[i].cumulative_length
+                error = compute_error(anchors[-1], i)
+                if error > max_error:
+                    anchors.append(i)
         anchors.append(len(self.gps_points) - 1)
         for i in range(1, len(anchors)):
             point_min = self.gps_points[anchors[i-1]]

@@ -67,7 +67,7 @@ class GladeHandler(object):
 
     def run_update_ui(self, method, args = None):
         """
-        Ececutes a UI-modifying method in a GTK-friendly manner
+        Executes a UI-modifying method in a GTK-friendly manner
         """
         if args:
             GLib.idle_add(method, args)
@@ -404,7 +404,6 @@ class ActivityDetailsHandler(GladeHandler):
 
         self.y_to_ele = lambda y: ele_max - (y - 10)/plot_height * (ele_max-ele_min)
         self.x_to_dist = lambda x: (x - 10)/plot_width * length
-
         self.colormap = lambda x: (max(min(3*(1-7*x), 1), 0), max(min(((1-7*x) - 0.4)*3, 1) , 0), max(min(((1-7*x) - 0.8)*5, 1), 0))
 
         cr.set_line_width(0)
