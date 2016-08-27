@@ -365,7 +365,7 @@ class ActivityDetailsHandler(GladeHandler):
         gps_point = self.activity_data.gps_track.find_point_at_distance(distance)
         if gps_point:
             tooltip_y = event.y_root - event.y
-            tooltip_x = event.x_root
+            tooltip_x = min(event.x_root, event.x_root - event.x + widget.get_allocated_width() - 200)
             tooltip.move(tooltip_x + 25, tooltip_y + 25)
             tooltip.get_child().set_markup("<tt>Distance " + str(round(gps_point.cumulative_length/1000, 1)) + " km\n" +\
                                                "Altitude " + str(round(gps_point.elevation)) + " m\n" +\
